@@ -20,7 +20,7 @@ Import-Module New-Hgrc
 ````
 
 ###3.
-Add the following to your `~\.hgrc` (global hgrc):
+Add the following to your `%HOMEPATH%\mercurial.ini` / `~\.hgrc` (global hgrc):
 
 ````
 [hooks]
