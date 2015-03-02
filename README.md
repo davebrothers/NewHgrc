@@ -24,7 +24,7 @@ Add the following to your `%HOMEPATH%\mercurial.ini` / `~\.hgrc` (global hgrc):
 
 ````
 [hooks]
-post-init = New-Hgrc
+post-init = powershell New-Hgrc
 ````
 
 If you use TortoiseHg, you already have it, but author recommends making sure the following is in your `mercurial.ini`:
