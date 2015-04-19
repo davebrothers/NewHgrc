@@ -1,6 +1,8 @@
 ﻿using System;
-using System.Management.Automation;
+using System.IO;
 using System.Text;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using IniParser;
 using IniParser.Exceptions;
 using IniParser.Model;
@@ -10,34 +12,43 @@ namespace NewHgrc
     [Cmdlet(VerbsCommon.New, "Hgrc")]
     public class NewHgrc : PSCmdlet
     {
-        private IniData hgIniData { get; set; }
-        private SectionData hgIniTortoiseHgSectionData { get; set; }
-        private SectionData hgIniUiSectionData { get; set; }
-        private IniData hgrcData { get; set; }
-        private SectionData authSectionData { get; set; }
-        private SectionData pathsSectionData { get; set; }
-        private SectionData uiSectionData { get; set; }
-        private FileIniDataParser parser = new FileIniDataParser();
+        private IniData HgIniData { get; set; }
+        private SectionData HgIniTortoiseHgSectionData { get; set; }
+        private SectionData HgIniUiSectionData { get; set; }
+        private IniData HgrcData { get; set; }
+        private SectionData AuthSectionData { get; set; }
+        private SectionData PathsSectionData { get; set; }
+        private SectionData UiSectionData { get; set; }
+        private readonly FileIniDataParser _parser = new FileIniDataParser();
 
         protected override void BeginProcessing()
         {
             base.BeginProcessing();
 
+            var dotHg = SessionState.Path.CurrentFileSystemLocation.ToString()
+                + @"\.hg";
+            if (!Directory.Exists(dotHg))
+            {
+                Console.WriteLine("Please init an hg repository.");
+                ThrowTerminatingError(new ErrorRecord(new DirectoryNotFoundException("Please init an hg repository"),
+                    @"0", ErrorCategory.ObjectNotFound, dotHg));
+            }
+
             var psHomeDrive = SessionState.PSVariable.GetValue("HOMEDRIVE");
             var psHomePath = SessionState.PSVariable.GetValue("HOMEPATH");
             var hgIniPath = (string)psHomeDrive + (string)psHomePath + @"\mercurial.ini";
 
-            hgrcData = new IniData();
-            authSectionData = new SectionData("auth");
-            pathsSectionData = new SectionData("paths");
-            uiSectionData = new SectionData("ui");
-            hgIniUiSectionData = new SectionData("ui");
+            HgrcData = new IniData();
+            AuthSectionData = new SectionData("auth");
+            PathsSectionData = new SectionData("paths");
+            UiSectionData = new SectionData("ui");
+            HgIniUiSectionData = new SectionData("ui");
 
-            parser.Parser.Configuration.CommentString = "#";
+            _parser.Parser.Configuration.CommentString = "#";
 
             try
             {
-                hgIniData = parser.ReadFile(hgIniPath);
+                HgIniData = _parser.ReadFile(hgIniPath);
             }
             catch (ParsingException e)
             {
@@ -51,25 +62,25 @@ namespace NewHgrc
                 return;
             }
 
-            hgIniTortoiseHgSectionData = hgIniData.Sections.GetSectionData("tortoisehg");
+            HgIniTortoiseHgSectionData = HgIniData.Sections.GetSectionData("tortoisehg");
 
-            if (hgIniData.Sections.ContainsSection("ui"))
-                hgIniUiSectionData = hgIniData.Sections.GetSectionData("ui");
+            if (HgIniData.Sections.ContainsSection("ui"))
+                HgIniUiSectionData = HgIniData.Sections.GetSectionData("ui");
 
-            if (hgIniUiSectionData.Keys.ContainsKey("username"))
+            if (HgIniUiSectionData.Keys.ContainsKey("username"))
             {
-                if (!hgIniUiSectionData.Keys.GetKeyData("username").Value.Equals(String.Empty) &&
-                    !hgIniUiSectionData.Keys.GetKeyData("username").Value.Equals(null))
+                if (!HgIniUiSectionData.Keys.GetKeyData("username").Value.Equals(String.Empty) &&
+                    !HgIniUiSectionData.Keys.GetKeyData("username").Value.Equals(null))
                 {
                     Console.WriteLine(
                         "Your global UI username is currently {0}.\nUse for this repository?",
-                        hgIniUiSectionData.Keys.GetKeyData("username").Value);
+                        HgIniUiSectionData.Keys.GetKeyData("username").Value);
                     var cki = PromptYn();
                     Console.WriteLine();
                     if (cki.Key == ConsoleKey.Y || cki.Key == ConsoleKey.Enter)
                     {
-                        authSectionData.Keys.AddKey("default.username", hgIniUiSectionData.Keys.GetKeyData("username").Value);
-                        uiSectionData.Keys.AddKey("username", hgIniUiSectionData.Keys.GetKeyData("username").Value);
+                        AuthSectionData.Keys.AddKey("default.username", HgIniUiSectionData.Keys.GetKeyData("username").Value);
+                        UiSectionData.Keys.AddKey("username", HgIniUiSectionData.Keys.GetKeyData("username").Value);
                     }
                     if (cki.Key == ConsoleKey.N)
                         PromptUsername();
@@ -88,18 +99,18 @@ namespace NewHgrc
         {
             base.EndProcessing();
 
-            hgrcData.Sections.SetSectionData("paths", pathsSectionData);
-            hgrcData.Sections.SetSectionData("auth", authSectionData);
+            HgrcData.Sections.SetSectionData("paths", PathsSectionData);
+            HgrcData.Sections.SetSectionData("auth", AuthSectionData);
 
             Console.WriteLine("Print hgrc contents before writing?");
             var cki = PromptYn();
             Console.WriteLine();
             if (cki.Key == ConsoleKey.Y || cki.Key == ConsoleKey.Enter)
-                PrintData(hgrcData);
+                PrintData(HgrcData);
 
             var path = String.Format("{0}\\.hg\\hgrc", SessionState.Path.CurrentLocation.Path);
 
-            parser.WriteFile(path, hgrcData);
+            _parser.WriteFile(path, HgrcData);
         }
 
         private void PromptUsername()
@@ -107,8 +118,8 @@ namespace NewHgrc
             Console.WriteLine("Please enter the username for this repository:");
             var readLine = Console.ReadLine();
             if (readLine == null) return;
-            authSectionData.Keys.AddKey("default.username", readLine.Trim());
-            uiSectionData.Keys.AddKey("username", readLine.Trim());
+            AuthSectionData.Keys.AddKey("default.username", readLine.Trim());
+            UiSectionData.Keys.AddKey("username", readLine.Trim());
         }
 
         private void PromptRemotePath()
@@ -116,8 +127,8 @@ namespace NewHgrc
             Console.WriteLine("Please enter the remote path for this repository:");
             var readLine = Console.ReadLine();
             if (readLine == null) return;
-            pathsSectionData.Keys.AddKey("default", readLine.Trim());
-            authSectionData.Keys.AddKey("default.prefix", readLine.Trim());
+            PathsSectionData.Keys.AddKey("default", readLine.Trim());
+            AuthSectionData.Keys.AddKey("default.prefix", readLine.Trim());
         }
 
         private ConsoleKeyInfo PromptYn()
@@ -132,13 +143,9 @@ namespace NewHgrc
 
         private void PrintData(IniData data)
         {
-            //Iterate through all the sections
             foreach (var section in data.Sections)
             {
                 Console.WriteLine("[{0}]", section.SectionName);
-
-                //Iterate through all the keys in the current section
-                //printing the values
                 foreach (KeyData key in section.Keys)
                     Console.WriteLine(key.KeyName + " = " + key.Value);
             }
